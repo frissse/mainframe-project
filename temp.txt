@@ -9,7 +9,7 @@ def check_age_file(file_path):
         age_file = os.path.getmtime(file_path)
 
         if age_file > 3600:
-            subprocess(command, )
+            subprocess.run(command, shell=True, capture_output=True)
     
 
 check_age_file(sysinfo_file_path)
