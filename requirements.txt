@@ -1,0 +1,3 @@
+zowe-python-sdk-bundle
+zowe.zos_files_for_zowe_sdk
+rich
