@@ -6,6 +6,12 @@ from datetime import datetime
 
 formatted_date = ""
 
+print("\nWelcome to the Expense Tracker!")
+print("This program allows you to input your expenses and get insights on them.")
+print("the expenses are stored in a mainframe dataset.")
+print("we suggest you enter the expenses for a specific month and year.")
+print("but it might also be an option to create a file per category.")
+
 def get_input_id():
     id = input("Enter the id of the file: ")
     return id
@@ -18,11 +24,7 @@ def get_formatted_date():
 
 def menu():
     while True:
-        print("\nWelcome to the Expense Tracker!")
-        print("This program allows you to input your expenses and get insights on them.")
-        print("the expenses are stored in a mainframe dataset.")
-        print("we suggest you enter the expenses for a specific month and year.")
-        print("but it might also be an option to create a file per category.")
+        
         print("\nWhat do you want to do?")
         print("1. Enter expense")
         print("2. List files")
@@ -80,7 +82,11 @@ def input_expenses_from_csv():
         
         # rename the inputted file to expenses-formatted_date.csv
         csv_file = f'expenses-{formatted_date}.csv'
+        
         os.rename(file.name, csv_file)
+        
+        clean_up_file(formatted_date)   
+        
         upload_expenses_to_ds(csv_file)
 
     
@@ -90,8 +96,6 @@ def input_expenses_manual():
 
     with open(csv_file, mode='w', newline='') as file:
         writer = csv.writer(file)
-       
-        writer.writerow(["Date", "Amount", "Category"])
 
         while True:
             date = input("Enter the date (YYYY-MM-DD): ")
@@ -153,10 +157,19 @@ def get_files():
             print("Invalid choice, please try again.")
 
 def download_file(id):
-    download_command = f"zowe zos-files download data-set Z58582.EXPENSES.E{id} -f expenses-{id}.csv"
+    download_command = f"zowe zos-files download data-set Z58582.EXPENSES.E{id} -f expenses-E{id}.csv"
     download_ds = subprocess.run(download_command, shell=True, capture_output=True)
-    print(download_ds.stdout.decode('utf-8'))
-    print("File downloaded successfully!")
+
+def clean_up_file(id):
+    with open(f"expenses-E{id}.csv", mode='r') as file:
+        lines = file.readlines()
+
+    with open(f"expenses-E{id}.csv", mode='w') as file:
+        substring = "Date"
+        for line in lines:
+            if substring not in line:
+                file.write(line)
+
 
 
 def list_all_files():
@@ -270,7 +283,7 @@ def get_total():
     id = get_input_id()
     download_file(id)
 
-    with open(f"expenses-{id}.csv", mode='r') as file:
+    with open(f"expenses-E{id}.csv", mode='r') as file:
         csv_reader = csv.reader(file)
         next(csv_reader)
         total = 0
@@ -278,6 +291,7 @@ def get_total():
             total += float(row[1])
         print(f"The total expense is: {total}")
     return 0
+
 
 def get_average():
     id = get_input_id()
