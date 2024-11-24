@@ -6,13 +6,29 @@ from datetime import datetime
 
 formatted_date = ""
 
+def get_input_id():
+    id = input("Enter the id of the file: ")
+    return id
+
+def get_formatted_date():
+    date = input("Enter the date to be used as suffix for the file in format YYYY-MM: ")
+    date_object = datetime.strptime(date, "%Y-%m")
+    global formatted_date 
+    formatted_date = date_object.strftime("%y%m")
+
 def menu():
     while True:
+        print("\nWelcome to the Expense Tracker!")
+        print("This program allows you to input your expenses and get insights on them.")
+        print("the expenses are stored in a mainframe dataset.")
+        print("we suggest you enter the expenses for a specific month and year.")
+        print("but it might also be an option to create a file per category.")
         print("\nWhat do you want to do?")
         print("1. Enter expense")
         print("2. List files")
-        print("3. Get expense data")
-        print("4. Exit")
+        print("3. Get expense insights")
+        print("4. merge files")
+        print("5. Exit")
 
         choice = input("Enter your choice (1-3): ")
 
@@ -21,13 +37,56 @@ def menu():
         elif choice == '2':
             get_files()
         elif choice == '3':
+            get_total()
+        elif choice == '4':
+            merge_files()
+            break
+        elif choice == '5':
             print("Exiting the menu. Goodbye!")
             break
         else:
             print("Invalid choice, please try again.")
 
 def input_expenses():
-    csv_file = 'expenses.csv'
+    while True:
+        print("\nHow do you want to input the expenses?")
+        print("1. From CSV file")
+        print("2. Manually")
+        print("3. Exit")
+
+        choice = input("Enter your choice (1-3): ")
+
+        if choice == '1':
+            input_expenses_from_csv()
+        elif choice == '2':
+            input_expenses_manual()
+        elif choice == '3':
+            print("Exiting the menu. Goodbye!")
+            break
+        else:
+            print("Invalid choice, please try again.")
+
+def input_expenses_from_csv():
+    get_formatted_date()
+    file = input("Enter the name of the CSV file:")
+    with open(file, mode='r') as file:
+        csv_reader = csv.reader(file)
+        next(csv_reader)
+        for row in csv_reader:
+            date = row[0]
+            amount = row[1]
+            category = row[2]
+            print(f"Date: {date}, Amount: {amount}, Category: {category}")
+        
+        # rename the inputted file to expenses-formatted_date.csv
+        csv_file = f'expenses-{formatted_date}.csv'
+        os.rename(file.name, csv_file)
+        upload_expenses_to_ds(csv_file)
+
+    
+def input_expenses_manual():
+    get_formatted_date()
+    csv_file = f'expenses-{formatted_date}.csv'
 
     with open(csv_file, mode='w', newline='') as file:
         writer = csv.writer(file)
@@ -36,9 +95,7 @@ def input_expenses():
 
         while True:
             date = input("Enter the date (YYYY-MM-DD): ")
-            date_object = datetime.strptime(date, "%Y-%m-%d")
-            global formatted_date 
-            formatted_date = date_object.strftime("%y%m%d")
+
             amount = float(input("Enter the amount: "))
             category = input("Enter the expense category: ")
 
@@ -49,12 +106,14 @@ def input_expenses():
             if more.lower() != 'y':
                 break
 
+    upload_expenses_to_ds(csv_file)
 
-def upload_expenses_to_ds():
+
+def upload_expenses_to_ds(csv_file):
     list_command = f"zowe zos-files list ds Z58582.EXPENSES.E{formatted_date} -a"
-    create_command = f"zowe zos-files create ds Z58582.EXPENSES.E{formatted_date}"
+    create_command = f"zowe zos-files create ds Z58582.EXPENSES.E{formatted_date} --record-format FB --record-length 80 --block-size 800"
     delete_command = f"zowe zos-files delete ds Z58582.EXPENSES.E{formatted_date} -f"
-    upload_command = f"zowe zos-files upload file-to-data-set \"expenses.csv\" \"Z58582.EXPENSES.E{formatted_date}\""
+    upload_command = f"zowe zos-files upload file-to-data-set \"{csv_file}\" \"Z58582.EXPENSES.E{formatted_date}\""
 
     list_ds = subprocess.run(list_command, shell=True, capture_output=True)
     str_stdout = list_ds.stdout.decode('utf-8')
@@ -75,17 +134,187 @@ def upload_expenses_to_ds():
 def get_files():
     # TODO: list all or specific file
     # TODO: download the file, convert to csv
-    id = input("Enter the id of the expenses file (EXPENSES.E<ID>): ")
-    list_command = f"zowe zos-files list ds Z58582.EXPENSES.E{id} -a"
-    list_of_ds = subprocess.run(list_command, shell=True, capture_output=True).stdout.decode('utf-8')
-    print(list_of_ds)
+    while True:
+        print("\nWhat do you want to do?")
+        print("1. List all files")
+        print("2. List specific file")
+        print("3. Exit")
 
-def merge_files():
-    # TODO: from input entry, get all the files, turn into one and convert to csv
+        choice = input("Enter your choice (1-3): ")
+
+        if choice == '1':
+            list_all_files()
+        elif choice == '2':
+            list_specific_file()
+        elif choice == '3':
+            print("Exiting the menu. Goodbye!")
+            break
+        else:
+            print("Invalid choice, please try again.")
+
+def download_file(id):
+    download_command = f"zowe zos-files download data-set Z58582.EXPENSES.E{id} -f expenses-{id}.csv"
+    download_ds = subprocess.run(download_command, shell=True, capture_output=True)
+    print(download_ds.stdout.decode('utf-8'))
+    print("File downloaded successfully!")
+
+
+def list_all_files():
+    list_command = "zowe zos-files list ds Z58582.EXPENSES.E* -a"
+    list_ds = subprocess.run(list_command, shell=True, capture_output=True)
+    result = list_ds.stdout.decode('utf-8')
+    parse_list_output(result)
+
+def list_specific_file(id=None):
+    list_command = f"zowe zos-files list ds Z58582.EXPENSES.E{id} -a"
+    list_ds = subprocess.run(list_command, shell=True, capture_output=True)
+    result = list_ds.stdout.decode('utf-8')
+
+    if ("Z58582.EXPENSES.E" not in result):
+        print("File not found.")
+        return 1
+    else:
+        parse_list_output(result, id)
+        return 0
+
+def parse_list_output(result, id=None):
+    if id is not None:
+        matching_lines = [line for line in result.splitlines() if id in line]
+        print("found the following files:")
+        count = 0
+        for line in matching_lines:
+            result = line.split(":")[1]
+            count += 1
+            print(f"{count}", result)
+            
+    else:
+        matching_lines = [line for line in result.splitlines() if "dsname:" in line]
+        print("found the following files:")
+        count = 0
+        for line in matching_lines:
+            result = line.split(":")[1]
+            count += 1
+            print(f"{count}", result)
+
     return 0
 
+
+def merge_files():
+    merge_job_command = "zowe zos-jobs submit local-file \"MERGE_JOB.txt\""
+
+    id1 = get_input_id()
+    id2 = get_input_id()
+    id_merged = get_input_id()
+    
+    id1_present = list_specific_file(id1)
+    id2_present = list_specific_file(id2)
+
+    if id1_present == 1:
+        print("File 1 not found.")
+        return 1
+    
+    if id2_present == 1:
+        print("File 2 not found.")
+        return 1
+    
+    if id1_present == 0 and id2_present == 0:
+        create_merge_job(id1, id2, id_merged)
+        merge_command = subprocess.run(merge_job_command, shell=True, capture_output=True)
+        print(merge_command.stdout.decode('utf-8'))
+        
+def create_merge_job(id1,id2, id_merged):
+    output_file = "MERGE_JOB.txt"
+
+    jcl_content = f"""//MERGEJOB JOB
+//STEP1    EXEC PGM=IEBGENER
+//MYDATA   DD DSN=Z58582.EXPENSES.E{id_merged},
+//             DISP=(NEW,CATLG,DELETE),
+//             SPACE=(CYL,(1,1),RLSE)
+//SORTCOPY EXEC PGM=SORT
+//SORTIN   DD DISP=SHR,DSN=Z58582.EXPENSES.E{id1}
+//         DD DISP=SHR,DSN=Z58582.EXPENSES.E{id2}
+//SORTOUT  DD DISP=OLD,DSN=Z58582.EXPENSES.E{id_merged}
+//SYSOUT   DD SYSOUT=* 
+//SYSIN    DD *
+  OPTION COPY
+/*
+"""
+
+    # Write the JCL to a file
+    with open(output_file, "w") as f:
+        f.write(jcl_content) 
+
+def get_expense_insights():
+    while True:
+        print("\nWhat do you want to do?")
+        print("1. Get total expense")
+        print("2. Get average expense")
+        print("3. Get expense by category")
+        print("4. Exit")
+
+        choice = input("Enter your choice (1-4): ")
+
+        if choice == '1':
+            get_total()
+        elif choice == '2':
+            get_average()
+        elif choice == '3':
+            get_by_category()
+        elif choice == '4':
+            print("Exiting the menu. Goodbye!")
+            break
+        else:
+            print("Invalid choice, please try again.")
+
 def get_total():
-    # TODO: run a calculation to get total amount spend 
+    id = get_input_id()
+    download_file(id)
+
+    with open(f"expenses-{id}.csv", mode='r') as file:
+        csv_reader = csv.reader(file)
+        next(csv_reader)
+        total = 0
+        for row in csv_reader:
+            total += float(row[1])
+        print(f"The total expense is: {total}")
+    return 0
+
+def get_average():
+    id = get_input_id()
+    download_file(id)
+
+    with open(f"expenses-{id}.csv", mode='r') as file:
+        csv_reader = csv.reader(file)
+        next(csv_reader)
+        total = 0
+        count = 0
+        for row in csv_reader:
+            total += float(row[1])
+            count += 1
+        average = total / count
+        print(f"The average expense is: {average}")
+    return 0
+
+def get_by_category():
+    id = get_input_id()
+    download_file(id)
+
+    category = input("Enter the category: ")
+
+    with open(f"expenses-{id}.csv", mode='r') as file:
+        csv_reader = csv.reader(file)
+        next(csv_reader)
+        categories = {}
+        for row in csv_reader:
+            category = row[2]
+            amount = float(row[1])
+            if category in categories:
+                categories[category] += amount
+            else:
+                categories[category] = amount
+        print("The expenses by category are:")
+        for category, amount in categories.items():
+            print(f"{category}: {amount}")
     return 0
 
 if __name__ == "__main__":
