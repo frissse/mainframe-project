@@ -1,10 +1,10 @@
 import subprocess
 import os
 import csv
-import random
 from datetime import datetime
 
 formatted_date = ""
+zos_id = input("Enter your z/OS ID: ")
 
 print("\nWelcome to the Expense Tracker!")
 print("This program allows you to input your expenses and get insights on them.")
@@ -39,7 +39,7 @@ def menu():
         elif choice == '2':
             get_files()
         elif choice == '3':
-            get_total()
+            get_expense_insights()
         elif choice == '4':
             merge_files()
             break
@@ -169,8 +169,6 @@ def clean_up_file(id):
         for line in lines:
             if substring not in line:
                 file.write(line)
-
-
 
 def list_all_files():
     list_command = "zowe zos-files list ds Z58582.EXPENSES.E* -a"
@@ -313,22 +311,18 @@ def get_by_category():
     id = get_input_id()
     download_file(id)
 
-    category = input("Enter the category: ")
+    category_to_check = input("Enter the category: ")
 
-    with open(f"expenses-{id}.csv", mode='r') as file:
+    with open(f"expenses-E{id}.csv", mode='r') as file:
         csv_reader = csv.reader(file)
         next(csv_reader)
-        categories = {}
+        categorie_sum = 0
         for row in csv_reader:
-            category = row[2]
             amount = float(row[1])
-            if category in categories:
-                categories[category] += amount
-            else:
-                categories[category] = amount
-        print("The expenses by category are:")
-        for category, amount in categories.items():
-            print(f"{category}: {amount}")
+            category = row[2]
+            if category == category_to_check:
+                categorie_sum += amount
+        print(f"The total expense for category {category_to_check} is: {categorie_sum}")
     return 0
 
 if __name__ == "__main__":
