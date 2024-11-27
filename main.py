@@ -114,16 +114,16 @@ def input_expenses_manual():
 
 
 def upload_expenses_to_ds(csv_file):
-    list_command = f"zowe zos-files list ds Z58582.EXPENSES.E{formatted_date} -a"
-    create_command = f"zowe zos-files create ds Z58582.EXPENSES.E{formatted_date} --record-format FB --record-length 80 --block-size 800"
-    delete_command = f"zowe zos-files delete ds Z58582.EXPENSES.E{formatted_date} -f"
-    upload_command = f"zowe zos-files upload file-to-data-set \"{csv_file}\" \"Z58582.EXPENSES.E{formatted_date}\""
+    list_command = f"zowe zos-files list ds {zos_id}.EXPENSES.E{formatted_date} -a"
+    create_command = f"zowe zos-files create ds {zos_id}.EXPENSES.E{formatted_date} --record-format FB --record-length 80 --block-size 800"
+    delete_command = f"zowe zos-files delete ds {zos_id}.EXPENSES.E{formatted_date} -f"
+    upload_command = f"zowe zos-files upload file-to-data-set \"{csv_file}\" \"{zos_id}.EXPENSES.E{formatted_date}\""
 
     list_ds = subprocess.run(list_command, shell=True, capture_output=True)
     str_stdout = list_ds.stdout.decode('utf-8')
     print(str_stdout)
     
-    if (f"Z58582.EXPENSES.E{formatted_date}" is str_stdout):
+    if (f"{zos_id}.EXPENSES.E{formatted_date}" is str_stdout):
         # TODO: possibility to merge entries with existing file when file exists, first download the file, get the entries, append to that file and upload again
         return 0
         # delete_ds = subprocess.run(delete_command, shell=True, capture_output=True)
@@ -157,7 +157,7 @@ def get_files():
             print("Invalid choice, please try again.")
 
 def download_file(id):
-    download_command = f"zowe zos-files download data-set Z58582.EXPENSES.E{id} -f expenses-E{id}.csv"
+    download_command = f"zowe zos-files download data-set {zos_id}.EXPENSES.E{id} -f expenses-E{id}.csv"
     download_ds = subprocess.run(download_command, shell=True, capture_output=True)
 
 def clean_up_file(id):
@@ -171,17 +171,17 @@ def clean_up_file(id):
                 file.write(line)
 
 def list_all_files():
-    list_command = "zowe zos-files list ds Z58582.EXPENSES.E* -a"
+    list_command = "zowe zos-files list ds {zos_id}.EXPENSES.E* -a"
     list_ds = subprocess.run(list_command, shell=True, capture_output=True)
     result = list_ds.stdout.decode('utf-8')
     parse_list_output(result)
 
 def list_specific_file(id=None):
-    list_command = f"zowe zos-files list ds Z58582.EXPENSES.E{id} -a"
+    list_command = f"zowe zos-files list ds {zos_id}.EXPENSES.E{id} -a"
     list_ds = subprocess.run(list_command, shell=True, capture_output=True)
     result = list_ds.stdout.decode('utf-8')
 
-    if ("Z58582.EXPENSES.E" not in result):
+    if ("{zos_id}.EXPENSES.E" not in result):
         print("File not found.")
         return 1
     else:
@@ -238,13 +238,13 @@ def create_merge_job(id1,id2, id_merged):
 
     jcl_content = f"""//MERGEJOB JOB
 //STEP1    EXEC PGM=IEBGENER
-//MYDATA   DD DSN=Z58582.EXPENSES.E{id_merged},
+//MYDATA   DD DSN={zos_id}.EXPENSES.E{id_merged},
 //             DISP=(NEW,CATLG,DELETE),
 //             SPACE=(CYL,(1,1),RLSE)
 //SORTCOPY EXEC PGM=SORT
-//SORTIN   DD DISP=SHR,DSN=Z58582.EXPENSES.E{id1}
-//         DD DISP=SHR,DSN=Z58582.EXPENSES.E{id2}
-//SORTOUT  DD DISP=OLD,DSN=Z58582.EXPENSES.E{id_merged}
+//SORTIN   DD DISP=SHR,DSN={zos_id}.EXPENSES.E{id1}
+//         DD DISP=SHR,DSN={zos_id}.EXPENSES.E{id2}
+//SORTOUT  DD DISP=OLD,DSN={zos_id}.EXPENSES.E{id_merged}
 //SYSOUT   DD SYSOUT=* 
 //SYSIN    DD *
   OPTION COPY
@@ -279,16 +279,19 @@ def get_expense_insights():
 
 def get_total():
     id = get_input_id()
-    download_file(id)
+    command = f"zowe zos-tso issue command \"exec 'Z58582.SOURCE(DBREXX)' 'EXPENSES.E{id}'\""
+    get_sum = subprocess.run(command, shell=True, capture_output=True) 
+    print(get_sum.stdout.decode('utf-8'))
+    # download_file(id)
 
-    with open(f"expenses-E{id}.csv", mode='r') as file:
-        csv_reader = csv.reader(file)
-        next(csv_reader)
-        total = 0
-        for row in csv_reader:
-            total += float(row[1])
-        print(f"The total expense is: {total}")
-    return 0
+    # with open(f"expenses-E{id}.csv", mode='r') as file:
+    #     csv_reader = csv.reader(file)
+    #     next(csv_reader)
+    #     total = 0
+    #     for row in csv_reader:
+    #         total += float(row[1])
+    #     print(f"The total expense is: {total}")
+    # return 0
 
 
 def get_average():
