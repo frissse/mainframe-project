@@ -279,7 +279,8 @@ def get_expense_insights():
 
 def get_total():
     id = get_input_id()
-    command = f"zowe zos-tso issue command \"exec 'Z58582.SOURCE(DBREXX)' 'EXPENSES.E{id}'\""
+    calc = "SUM"
+    command = f"zowe zos-tso issue command \"exec '{zos_id}.SOURCE({calc}REXX)' 'EXPENSES.E{id}'\""
     get_sum = subprocess.run(command, shell=True, capture_output=True) 
     print(get_sum.stdout.decode('utf-8'))
     # download_file(id)
@@ -296,19 +297,23 @@ def get_total():
 
 def get_average():
     id = get_input_id()
-    download_file(id)
+    calc = "AVG"
+    command = f"zowe zos-tso issue command \"exec '{zos_id}.SOURCE({calc}REXX)' 'EXPENSES.E{id}'\""
+    get_average = subprocess.run(command, shell=True, capture_output=True)
+    print(get_average.stdout.decode('utf-8'))
+    # download_file(id)
 
-    with open(f"expenses-{id}.csv", mode='r') as file:
-        csv_reader = csv.reader(file)
-        next(csv_reader)
-        total = 0
-        count = 0
-        for row in csv_reader:
-            total += float(row[1])
-            count += 1
-        average = total / count
-        print(f"The average expense is: {average}")
-    return 0
+    # with open(f"expenses-{id}.csv", mode='r') as file:
+    #     csv_reader = csv.reader(file)
+    #     next(csv_reader)
+    #     total = 0
+    #     count = 0
+    #     for row in csv_reader:
+    #         total += float(row[1])
+    #         count += 1
+    #     average = total / count
+    #     print(f"The average expense is: {average}")
+    # return 0
 
 def get_by_category():
     id = get_input_id()
