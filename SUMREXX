@@ -1,0 +1,36 @@
+/* REXX Script to make sum of expenses in dataset */
+DSN = ARG(1)
+
+IF DSN = '' THEN DO
+    SAY "No dataset name provided. Exiting."
+    EXIT
+END
+
+TOTAL_EXPENSE = 0
+
+/* allocates the dataset so it can be accessed by REXX  */
+ADDRESS TSO "ALLOCATE DD(INPUT) DSN("DSN") SHR REUSE"
+IF RC \= 0 THEN DO
+    SAY "Failed to allocate dataset:" DSN
+    EXIT
+END
+
+"EXECIO * DISKR INPUT (STEM DATA. FINIS"
+IF RC \= 0 THEN DO
+    SAY "Failed to read dataset."
+    ADDRESS TSO "FREE DD(INPUT)"
+    EXIT
+END
+
+DO I = 1 TO DATA.0
+    /* Split the line using the comma as a delimiter */
+    PARSE VALUE DATA.I WITH DATE ',' AMOUNT ',' CATEGORY
+    IF DATATYPE(AMOUNT, 'NUM') THEN
+        TOTAL_EXPENSE = TOTAL_EXPENSE + AMOUNT
+    ELSE
+        SAY "Invalid amount in line" I ": " AMOUNT
+END
+
+ADDRESS TSO "FREE DD(INPUT)"
+SAY "Total Expense: $" TOTAL_EXPENSE
+EXIT

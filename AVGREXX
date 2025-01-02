@@ -1,0 +1,49 @@
+/* REXX Script to calculate weighted average from dataset */
+DSN = ARG(1)
+
+IF DSN = '' THEN DO
+    SAY "No dataset name provided. Exiting."
+    EXIT
+END
+
+TOTAL_WEIGHT = 0
+WEIGHTED_SUM = 0
+
+/* Allocate the dataset so it can be accessed by REXX */
+ADDRESS TSO "ALLOCATE DD(INPUT) DSN("DSN") SHR REUSE"
+IF RC \= 0 THEN DO
+    SAY "Failed to allocate dataset:" DSN
+    EXIT
+END
+
+"EXECIO * DISKR INPUT (STEM DATA. FINIS"
+IF RC \= 0 THEN DO
+    SAY "Failed to read dataset."
+    ADDRESS TSO "FREE DD(INPUT)"
+    EXIT
+END
+
+DO I = 1 TO DATA.0
+    /* Split the line using the comma as a delimiter */
+    PARSE VALUE DATA.I WITH WEIGHT ',' GRADE
+    IF DATATYPE(WEIGHT, 'NUM') & DATATYPE(GRADE, 'NUM') THEN DO
+        WEIGHTED_SUM = WEIGHTED_SUM + (WEIGHT * GRADE)
+        TOTAL_WEIGHT = TOTAL_WEIGHT + WEIGHT
+    END
+    ELSE DO
+        SAY "Invalid data in line" I ": " DATA.I
+    END
+END
+
+ADDRESS TSO "FREE DD(INPUT)"
+
+/* Calculate and display the weighted average */
+IF TOTAL_WEIGHT > 0 THEN DO
+    WEIGHTED_AVERAGE = WEIGHTED_SUM / TOTAL_WEIGHT
+    SAY "Weighted Average:" WEIGHTED_AVERAGE
+END
+ELSE DO
+    SAY "No valid data found in the dataset."
+END
+
+EXIT

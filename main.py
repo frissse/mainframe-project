@@ -4,9 +4,43 @@ import csv
 from datetime import datetime
 
 formatted_date = ""
-zos_id = input("Enter your z/OS ID: ")
 
-print("\nWelcome to the Expense Tracker!")
+def get_zos_id():
+    # check for file named zos_id.txt
+    if os.path.exists("zos_id.txt"):
+        with open("zos_id.txt", mode='r') as file:
+            zos_id = file.read()
+            return zos_id
+    zos_id = input("Enter your z/OS ID: ")
+    # write the zos_id to a file
+    with open("zos_id.txt", mode='w') as file:
+        file.write(zos_id)
+    return zos_id
+
+zos_id = get_zos_id()
+
+def copy_rexx_file():
+    list_command = f"zowe zos-files list ds {zos_id}.SCRIPTS.* -a"
+    list_ds = subprocess.run(list_command, shell=True, capture_output=True)
+    str_stdout = list_ds.stdout.decode('utf-8')
+    
+    if (f"{zos_id}.SCRIPTS.AVGREXX" in str_stdout and f"{zos_id}.SCRIPTS.SUMREXX" in str_stdout):
+        print("REXX files already present on mainframe.")
+        return 0
+    else:
+        create_rexx_ds_avg = subprocess.run(f"zowe zos-files create ds {zos_id}.SCRIPTS.AVGREXX --record-format FB --record-length 80 --block-size 800", shell=True, capture_output=True)
+        create_rexx_ds_sum = subprocess.run(f"zowe zos-files create ds {zos_id}.SCRIPTS.SUMREXX --record-format FB --record-length 80 --block-size 800", shell=True, capture_output=True)
+        copy_command_rexx_avg = subprocess.run(f"zowe zos-files upload file-to-data-set \"AVGREXX\" \"Z58582.SCRIPTS.AVGREXX\"", shell=True, capture_output=True)
+        copy_command_rexx_sum = subprocess.run(f"zowe zos-files upload file-to-data-set \"SUMREXX\" \"Z58582.SCRIPTS.SUMREXX\"", shell=True, capture_output=True)
+        
+        if "ERROR" not in copy_command_rexx_avg.stdout.decode('UTF-8') and "ERROR" not in copy_command_rexx_sum.stdout.decode('UTF-8'):
+            print("REXX files copied successfully.")
+            return 0
+        else:
+            print("Error copying REXX files.")
+            return 1
+
+print(f"\nWelcome to zMoneyTracker {zos_id}!")
 print("This program allows you to input your expenses and get insights on them.")
 print("the expenses are stored in a mainframe dataset.")
 print("we suggest you enter the expenses for a specific month and year.")
@@ -26,13 +60,13 @@ def menu():
     while True:
         
         print("\nWhat do you want to do?")
-        print("1. Enter expense")
+        print("1. Enter expense (manual or by file)")
         print("2. List files")
         print("3. Get expense insights")
-        print("4. merge files")
+        print("4. Merge files")
         print("5. Exit")
 
-        choice = input("Enter your choice (1-3): ")
+        choice = input("Enter your choice (1-5): ")
 
         if choice == '1':
             input_expenses()
@@ -70,7 +104,8 @@ def input_expenses():
 
 def input_expenses_from_csv():
     get_formatted_date()
-    file = input("Enter the name of the CSV file:")
+    file = input("Enter the file path of the CSV file:")
+    csv_file = ""
     with open(file, mode='r') as file:
         csv_reader = csv.reader(file)
         next(csv_reader)
@@ -81,13 +116,13 @@ def input_expenses_from_csv():
             print(f"Date: {date}, Amount: {amount}, Category: {category}")
         
         # rename the inputted file to expenses-formatted_date.csv
-        csv_file = f'expenses-{formatted_date}.csv'
+        csv_file = f'expenses-E{formatted_date}.csv'
         
-        os.rename(file.name, csv_file)
+    os.rename(file.name, csv_file)
         
-        clean_up_file(formatted_date)   
+    clean_up_file(formatted_date)   
         
-        upload_expenses_to_ds(csv_file)
+    upload_expenses_to_ds(csv_file)
 
     
 def input_expenses_manual():
@@ -116,19 +151,33 @@ def input_expenses_manual():
 def upload_expenses_to_ds(csv_file):
     list_command = f"zowe zos-files list ds {zos_id}.EXPENSES.E{formatted_date} -a"
     create_command = f"zowe zos-files create ds {zos_id}.EXPENSES.E{formatted_date} --record-format FB --record-length 80 --block-size 800"
+    create_command_copy = f"zowe zos-files create ds {zos_id}.EXPENSES.E{formatted_date}.COPY --record-format FB --record-length 80 --block-size 800"
     delete_command = f"zowe zos-files delete ds {zos_id}.EXPENSES.E{formatted_date} -f"
     upload_command = f"zowe zos-files upload file-to-data-set \"{csv_file}\" \"{zos_id}.EXPENSES.E{formatted_date}\""
+    upload_command_copy = f"zowe zos-files upload file-to-data-set \"{csv_file}\" \"{zos_id}.EXPENSES.E{formatted_date}.COPY\""
 
     list_ds = subprocess.run(list_command, shell=True, capture_output=True)
     str_stdout = list_ds.stdout.decode('utf-8')
-    print(str_stdout)
     
-    if (f"{zos_id}.EXPENSES.E{formatted_date}" is str_stdout):
-        # TODO: possibility to merge entries with existing file when file exists, first download the file, get the entries, append to that file and upload again
+    if (f"{zos_id}.EXPENSES.E{formatted_date}" in str_stdout):
+        print("File already exists.")
+        print("Do you want to overwrite the file?")
+        overwrite = input("Enter y/n: ")
+        if overwrite.lower() == 'y':
+            delete_ds = subprocess.run(delete_command, shell=True, capture_output=True)
+            print(delete_ds.stdout.decode('utf-8'))
+            create_ds = subprocess.run(create_command, shell=True, capture_output=True)
+            upload_command = subprocess.run(upload_command, shell=True, capture_output=True)
+            print(create_ds.stdout.decode('utf-8'))
+        else:
+            create_copy_ds = subprocess.run(create_command_copy, shell=True, capture_output=True)
+            upload_copy_ds = subprocess.run(upload_command_copy, shell=True, capture_output=True)
+            print(create_copy_ds.stdout.decode('utf-8'))
+            merge_files("auto", f"{formatted_date}", f"{formatted_date}.COPY")
+            return 0        
+
         return 0
-        # delete_ds = subprocess.run(delete_command, shell=True, capture_output=True)
-        # print(delete_ds.stdout.decode('utf-8'))
-        # print(delete_ds.stderr.decode('utf-8'))
+        
 
     create_ds = subprocess.run(create_command, shell=True, capture_output=True)
     print(create_ds.stdout.decode('utf-8'))
@@ -181,7 +230,9 @@ def list_specific_file(id=None):
     list_ds = subprocess.run(list_command, shell=True, capture_output=True)
     result = list_ds.stdout.decode('utf-8')
 
-    if ("{zos_id}.EXPENSES.E" not in result):
+    print(result)
+
+    if (f"{zos_id}.EXPENSES.E{id}" not in result):
         print("File not found.")
         return 1
     else:
@@ -210,22 +261,27 @@ def parse_list_output(result, id=None):
     return 0
 
 
-def merge_files():
+def merge_files(mode=None, id1=None, id2=None):
     merge_job_command = "zowe zos-jobs submit local-file \"MERGE_JOB.txt\""
 
-    id1 = get_input_id()
-    id2 = get_input_id()
+    if mode != "auto":
+        id1 = get_input_id()
+        id2 = get_input_id()
+    
+    print(id1)
+    print(id2)
+    
     id_merged = get_input_id()
     
     id1_present = list_specific_file(id1)
     id2_present = list_specific_file(id2)
 
     if id1_present == 1:
-        print("File 1 not found.")
+        print(f"File with id {id1} not found.")
         return 1
     
     if id2_present == 1:
-        print("File 2 not found.")
+        print(f"File with id {id2} not found.")
         return 1
     
     if id1_present == 0 and id2_present == 0:
@@ -237,18 +293,17 @@ def create_merge_job(id1,id2, id_merged):
     output_file = "MERGE_JOB.txt"
 
     jcl_content = f"""//MERGEJOB JOB
-//STEP1    EXEC PGM=IEBGENER
-//MYDATA   DD DSN={zos_id}.EXPENSES.E{id_merged},
-//             DISP=(NEW,CATLG,DELETE),
-//             SPACE=(CYL,(1,1),RLSE)
-//SORTCOPY EXEC PGM=SORT
+//STEP1    EXEC PGM=SORT
 //SORTIN   DD DISP=SHR,DSN={zos_id}.EXPENSES.E{id1}
 //         DD DISP=SHR,DSN={zos_id}.EXPENSES.E{id2}
-//SORTOUT  DD DISP=OLD,DSN={zos_id}.EXPENSES.E{id_merged}
-//SYSOUT   DD SYSOUT=* 
+//SORTOUT  DD DSN={zos_id}.EXPENSES.E{id_merged},
+//         DISP=(NEW,CATLG,DELETE),
+//         SPACE=(CYL,(1,1),RLSE),
+//         DCB=(RECFM=FB,LRECL=80) 
+//SYSOUT   DD SYSOUT=*
 //SYSIN    DD *
-  OPTION COPY
-/*
+  SORT FIELDS=COPY
+/* 
 """
 
     # Write the JCL to a file
@@ -280,7 +335,7 @@ def get_expense_insights():
 def get_total():
     id = get_input_id()
     calc = "SUM"
-    command = f"zowe zos-tso issue command \"exec '{zos_id}.SOURCE({calc}REXX)' 'EXPENSES.E{id}'\""
+    command = f"zowe zos-tso issue command \"exec '{zos_id}.SCRIPTS.{calc}REXX' 'EXPENSES.E{id}'\""
     get_sum = subprocess.run(command, shell=True, capture_output=True) 
     print(get_sum.stdout.decode('utf-8'))
     # download_file(id)
@@ -297,8 +352,9 @@ def get_total():
 
 def get_average():
     id = get_input_id()
+    print(id)
     calc = "AVG"
-    command = f"zowe zos-tso issue command \"exec '{zos_id}.SOURCE({calc}REXX)' 'EXPENSES.E{id}'\""
+    command = f"zowe zos-tso issue command \"exec '{zos_id}.SCRIPTS.{calc}REXX' 'EXPENSES.E{id}'\""
     get_average = subprocess.run(command, shell=True, capture_output=True)
     print(get_average.stdout.decode('utf-8'))
     # download_file(id)
@@ -334,4 +390,5 @@ def get_by_category():
     return 0
 
 if __name__ == "__main__":
+    copy_rexx_file()
     menu()
